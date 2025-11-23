@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Cursed Drummer: Rhythm of the Damned</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #000;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            background-color: #000;
+            border: 2px solid #444;
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+        }
+
+        /* 背景影片 */
+        #bg-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 0;
+            opacity: 0.6;
+            filter: grayscale(30%);
+        }
+
+        /* 軌道區域 */
+        .lanes {
+            display: flex;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .lane {
+            flex: 1;
+            border-right: 1px solid rgba(255, 255, 255, 0.15);
+            position: relative;
+        }
+        .lane:last-child { border-right: none; }
+
+        /* 按鍵提示區域 */
+        .key-zone {
+            position: absolute;
+            bottom: 40px;
+            width: 100%;
+            height: 60px;
+            display: flex;
+            z-index: 2;
+        }
+
+        .key-receptor {
+            flex: 1;
+            border-top: 4px solid rgba(255, 255, 255, 0.8);
+            border-bottom: 4px solid rgba(255, 255, 255, 0.8);
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 20px;
+            color: #fff;
+            text-shadow: 0 0 5px #000;
+            transition: background 0.1s;
+        }
+
+        .key-receptor.active {
+            background: rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 20px white;
+        }
+
+        /* 下落的音符 */
+        .note {
+            position: absolute;
+            width: 100%;
+            height: 20px;
+            top: -20px;
+            border-radius: 4px;
+            box-shadow: 0 0 15px currentColor;
+            border: 1px solid rgba(255,255,255,0.6);
+            z-index: 2;
+        }
+
+        /* UI 層 */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            pointer-events: none;
+            z-index: 5;
+        }
+        
+        #score-board { margin-top: 20px; }
+        #score { font-size: 24px; color: #0ff; text-shadow: 2px 2px 0px #000; font-weight: bold; }
+        #combo { font-size: 40px; color: #f0f; font-weight: bold; margin-top: 5px; opacity: 0; transition: opacity 0.2s; text-shadow: 2px 2px 0px #000;}
+        #feedback { font-size: 30px; color: #ff0; margin-top: 10px; font-weight: bold; height: 30px; text-shadow: 2px 2px 0px #000;}
+
+        /* 放棄按鈕 */
+        #give-up-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(200, 0, 0, 0.6);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            padding: 5px 12px;
+            font-size: 12px;
+            border-radius: 15px;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: background 0.2s;
+            font-weight: bold;
+            display: none;
+        }
+        #give-up-btn:hover {
+            background: rgba(255, 0, 0, 0.9);
+            transform: scale(1.1);
+        }
+
+        /* 遮罩層 (標題) */
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: url('intro.jpg') no-repeat center center;
+            background-size: cover;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end; 
+            align-items: center;
+            z-index: 10;
+            transition: background 0.5s;
+            padding-bottom: 60px; 
+        }
+
+        #start-content {
+            text-align: center;
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+            width: 100%;
+            padding: 20px 0;
+        }
+
+        /* --- 修改重點：結算模式樣式 --- */
+        #overlay.result-mode {
+            background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.8) 100%), url('finish.jpg');
+            background-size: cover;
+            background-position: center;
+            
+            /* 改回靠下對齊 */
+            justify-content: flex-end; 
+            /* 底部留白：可以依需求調整這個數字，數字越大視窗越往上浮 */
+            padding-bottom: 80px; 
+        }
+
+        /* 結算框框：保持小尺寸 */
+        .result-box {
+            background: rgba(0, 0, 0, 0.75); 
+            padding: 15px 30px; 
+            border-radius: 12px;
+            border: 1px solid #ff0055; 
+            text-align: center;
+            box-shadow: 0 0 15px #000;
+            backdrop-filter: blur(3px);
+            width: auto;
+            min-width: 200px; 
+            margin-bottom: 0; /* 由父層 padding 控制位置 */
+        }
+
+        /* 字體 */
+        .result-title { 
+            font-size: 24px; 
+            color: #ff0055; 
+            margin-bottom: 8px; 
+            font-weight: bold; 
+            font-style: italic; 
+            text-shadow: 1px 1px #fff;
+        }
+        .result-score { 
+            font-size: 18px; 
+            margin: 8px 0; 
+        }
+        .result-combo { 
+            font-size: 14px; 
+            color: #0ff; 
+            margin-bottom: 15px; 
+        }
+
+        /* 按鈕樣式 */
+        .main-btn {
+            padding: 10px 30px; 
+            font-size: 18px;    
+            background: #ff0055;
+            border: 2px solid white;
+            cursor: pointer;
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            border-radius: 50px;
+            transition: transform 0.1s, background 0.2s;
+            pointer-events: auto;
+        }
+        .main-btn:hover { background: #fff; color: #ff0055; transform: scale(1.05); }
+        
+        /* 開始畫面的按鈕維持大顆 */
+        #start-btn {
+            padding: 15px 40px;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .file-status { color: #ffcc00; font-size: 12px; margin-bottom: 10px; text-shadow: 1px 1px 2px black; }
+        .instructions { margin-top: 10px; color: #fff; text-align: center; line-height: 1.4; text-shadow: 1px 1px 2px black; font-size: 14px;}
+
+        @keyframes hitEffect {
+            0% { transform: scale(1.2); opacity: 1; background: rgba(255, 255, 255, 0.8); }
+            100% { transform: scale(1.5); opacity: 0; background: rgba(255, 255, 255, 0); }
+        }
+        .hit-anim {
+            position: absolute;
+            bottom: 40px;
+            width: 25%;
+            height: 60px;
+            pointer-events: none;
+            animation: hitEffect 0.2s ease-out forwards;
+            z-index: 3;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <video id="bg-video" src="bg_video.mp4" loop muted playsinline></video>
+
+        <div class="lanes">
+            <div class="lane" id="lane-0"></div>
+            <div class="lane" id="lane-1"></div>
+            <div class="lane" id="lane-2"></div>
+            <div class="lane" id="lane-3"></div>
+        </div>
+
+        <div class="key-zone">
+            <div class="key-receptor" id="key-0">D</div>
+            <div class="key-receptor" id="key-1">F</div>
+            <div class="key-receptor" id="key-2">J</div>
+            <div class="key-receptor" id="key-3">K</div>
+        </div>
+
+        <div id="ui-layer">
+            <button id="give-up-btn">放棄</button>
+            <div id="score-board">
+                <div id="score">Score: 0</div>
+                <div id="combo">0 COMBO</div>
+                <div id="feedback"></div>
+            </div>
+        </div>
+
+        <div id="overlay">
+            <div id="start-content">
+                <div class="file-status">檢查: intro.jpg, bg_video.mp4, music.mp3, finish.jpg</div>
+                <button id="start-btn" class="main-btn">START GAME</button>
+                <div class="instructions">
+                    Controls: <strong>D, F, J, K</strong><br>
+                    Challenge the Cursed Drummer!
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <audio id="bgm" src="music.mp3" preload="auto"></audio>
+
+    <script>
+        const KEYS = ['d', 'f', 'j', 'k'];
+        const COLORS = ['#ff5e78', '#4cdbf5', '#4cdbf5', '#ff5e78']; 
+        const BPM = 94; 
+        const SPAWN_RATE = 60000 / BPM; 
+        const NOTE_SPEED = 350; 
+        const HIT_ZONE_Y = 500; 
+        const HIT_WINDOW = { PERFECT: 40, GOOD: 80, MISS: 140 };
+
+        let score = 0;
+        let combo = 0;
+        let maxCombo = 0; 
+        let isPlaying = false;
+        let audioCtx;
+        let startTime;
+        let notes = [];
+        let nextSpawnTime = 0;
+        let gameLoopId;
+        
+        const scoreEl = document.getElementById('score');
+        const comboEl = document.getElementById('combo');
+        const feedbackEl = document.getElementById('feedback');
+        const overlay = document.getElementById('overlay');
+        const bgm = document.getElementById('bgm');
+        const bgVideo = document.getElementById('bg-video');
+        const giveUpBtn = document.getElementById('give-up-btn');
+        const startContent = document.getElementById('start-content');
+        
+        const lanes = [
+            document.getElementById('lane-0'),
+            document.getElementById('lane-1'),
+            document.getElementById('lane-2'),
+            document.getElementById('lane-3')
+        ];
+        const receptors = [
+            document.getElementById('key-0'),
+            document.getElementById('key-1'),
+            document.getElementById('key-2'),
+            document.getElementById('key-3')
+        ];
+
+        function initAudio() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!audioCtx) audioCtx = new AudioContext();
+        }
+
+        function playHitSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+            osc.start(now);
+            osc.stop(now + 0.05);
+        }
+
+        function startGame() {
+            initAudio();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            bgm.currentTime = 0;
+            bgm.play().catch(e => console.error("Audio Error:", e));
+            bgVideo.currentTime = 0;
+            bgVideo.play().catch(e => console.error("Video Error:", e));
+
+            // 重置遮罩內容
+            overlay.style.display = 'none';
+            overlay.classList.remove('result-mode'); 
+            // 恢復 start-content 的顯示狀態
+            startContent.style.display = 'block';
+            
+            giveUpBtn.style.display = 'block'; 
+            
+            score = 0;
+            combo = 0;
+            maxCombo = 0;
+            notes = [];
+            lanes.forEach(l => l.innerHTML = '');
+            updateScore(0);
+            updateCombo();
+
+            isPlaying = true;
+            startTime = performance.now();
+            nextSpawnTime = 0;
+            loop();
+        }
+
+        function showResults() {
+            isPlaying = false;
+            bgm.pause();
+            bgVideo.pause();
+            giveUpBtn.style.display = 'none';
+
+            overlay.classList.add('result-mode');
+            overlay.style.display = 'flex';
+            
+            // 隱藏開始畫面的內容
+            startContent.style.display = 'none';
+
+            // 插入結算 HTML
+            overlay.innerHTML = `
+                <div class="result-box">
+                    <div class="result-title">GAME OVER</div>
+                    <div class="result-score">Score: ${score}</div>
+                    <div class="result-combo">Max Combo: ${maxCombo}</div>
+                    <button id="restart-btn" class="main-btn">Play Again</button>
+                </div>
+            `;
+
+            document.getElementById('restart-btn').addEventListener('click', () => {
+                overlay.innerHTML = ''; 
+                overlay.appendChild(startContent);
+                startGame();
+            });
+        }
+
+        giveUpBtn.addEventListener('click', () => {
+            if (isPlaying) showResults();
+        });
+
+        function spawnNote(timeOffset) {
+            let count = Math.random() > 0.8 ? 2 : 1;
+            let availableLanes = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+            for (let i = 0; i < count; i++) {
+                const laneIndex = availableLanes[i];
+                const noteEl = document.createElement('div');
+                noteEl.classList.add('note');
+                noteEl.style.backgroundColor = COLORS[laneIndex];
+                noteEl.style.top = '-20px'; 
+                lanes[laneIndex].appendChild(noteEl);
+                notes.push({
+                    el: noteEl,
+                    lane: laneIndex,
+                    spawnTime: timeOffset,
+                    hitTime: timeOffset + (HIT_ZONE_Y / (NOTE_SPEED / 1000)),
+                    active: true
+                });
+            }
+        }
+
+        function loop() {
+            if (!isPlaying) return;
+            const currentTime = performance.now() - startTime;
+            
+            if (bgm.ended) {
+                showResults();
+                return;
+            }
+
+            if (currentTime >= nextSpawnTime) {
+                spawnNote(currentTime);
+                nextSpawnTime += SPAWN_RATE;
+            }
+
+            notes.forEach(note => {
+                if (!note.active) return;
+                const timeAlive = currentTime - note.spawnTime;
+                const distance = (NOTE_SPEED / 1000) * timeAlive;
+                note.el.style.top = (distance - 20) + 'px';
+
+                if (distance > HIT_ZONE_Y + HIT_WINDOW.MISS) {
+                    triggerFeedback("MISS", '#aaa');
+                    combo = 0;
+                    updateCombo();
+                    note.active = false;
+                    note.el.style.opacity = 0.5;
+                }
+                if (distance > 650) {
+                    if (note.el.parentNode) note.el.parentNode.removeChild(note.el);
+                }
+            });
+            notes = notes.filter(n => n.active || n.el.parentNode !== null);
+            gameLoopId = requestAnimationFrame(loop);
+        }
+
+        function handleInput(keyIndex) {
+            if (!isPlaying) return;
+            receptors[keyIndex].classList.add('active');
+            setTimeout(() => receptors[keyIndex].classList.remove('active'), 100);
+
+            const currentTime = performance.now() - startTime;
+            const targetNote = notes.find(n => 
+                n.active && 
+                n.lane === keyIndex && 
+                Math.abs(currentTime - n.hitTime) < HIT_WINDOW.MISS
+            );
+
+            if (targetNote) {
+                const diff = Math.abs(currentTime - targetNote.hitTime);
+                let hitType = "";
+                let scoreAdd = 0;
+                let color = "";
+                if (diff <= HIT_WINDOW.PERFECT) {
+                    hitType = "PERFECT"; scoreAdd = 100; color = "#ff0"; 
+                } else if (diff <= HIT_WINDOW.GOOD) {
+                    hitType = "GROOVY"; scoreAdd = 50; color = "#0f0"; 
+                } else {
+                    hitType = "BAD"; scoreAdd = 10; color = "#00f";
+                }
+                targetNote.active = false;
+                targetNote.el.style.display = 'none';
+                createHitEffect(keyIndex);
+                playHitSound();
+                score += scoreAdd;
+                combo++;
+                if (combo > maxCombo) maxCombo = combo;
+                updateScore(score);
+                updateCombo();
+                triggerFeedback(hitType, color);
+            }
+        }
+
+        function updateScore(val) { scoreEl.innerText = `Score: ${val}`; }
+        function updateCombo() {
+            if (combo > 0) {
+                comboEl.innerText = `${combo} COMBO`;
+                comboEl.style.opacity = 1;
+                comboEl.style.transform = 'scale(1.2)';
+                setTimeout(() => comboEl.style.transform = 'scale(1)', 100);
+            } else {
+                comboEl.style.opacity = 0;
+            }
+        }
+        function triggerFeedback(text, color) {
+            feedbackEl.innerText = text;
+            feedbackEl.style.color = color;
+            feedbackEl.style.transform = 'scale(1.2)';
+            setTimeout(() => feedbackEl.style.transform = 'scale(1)', 100);
+        }
+        function createHitEffect(laneIndex) {
+            const effect = document.createElement('div');
+            effect.classList.add('hit-anim');
+            effect.style.left = (laneIndex * 25) + '%';
+            document.getElementById('game-container').appendChild(effect);
+            setTimeout(() => effect.remove(), 200);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            const key = e.key.toLowerCase();
+            const index = KEYS.indexOf(key);
+            if (index !== -1) handleInput(index);
+        });
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+    </script>
+</body>
+</html>
